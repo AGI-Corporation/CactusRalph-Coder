@@ -1,0 +1,10 @@
+title: CactusRalph-Coder
+description: A coding project and portfolio site by AGI Corporation.
+url: "https://agi-corporation.github.io"
+baseurl: "/CactusRalph-Coder"
+
+theme: minima
+
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
