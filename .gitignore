@@ -16,3 +16,10 @@ _site/
 # counterproductive to check this file into the repository.
 # Details at https://github.com/github/pages-gem/issues/768
 Gemfile.lock
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Environment
+.env
