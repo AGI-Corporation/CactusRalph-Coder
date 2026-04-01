@@ -66,7 +66,9 @@ def test_memory_get_recent_multiple(tmp_path):
 
     recent = memory.get_recent(3)
     assert len(recent) == 3
-    # Most recent three
+    # Verify we got the three most recent requirements (indices 2, 3, 4)
+    assert recent[0]["requirement"] == "Requirement 2"
+    assert recent[1]["requirement"] == "Requirement 3"
     assert recent[-1]["requirement"] == "Requirement 4"
 
 

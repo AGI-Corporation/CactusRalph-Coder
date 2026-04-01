@@ -12,8 +12,11 @@ import tempfile
 class Sandbox:
     """Executes code safely in a subprocess with a configurable timeout."""
 
+    SANDBOX_DIR_NAME = ".sandbox_run"
+
     def __init__(self, project_root: str = "."):
         self.project_root = os.path.abspath(project_root)
+        self._sandbox_dir = os.path.join(self.project_root, self.SANDBOX_DIR_NAME)
 
     # ------------------------------------------------------------------
     # Syntax validation
@@ -50,8 +53,8 @@ class Sandbox:
 
         Returns (passed: bool, output: str).
         """
-        # Use a temp directory inside the project to avoid /tmp restrictions
-        sandbox_dir = os.path.join(self.project_root, ".sandbox_run")
+        # Use a stable directory inside the project to avoid /tmp restrictions
+        sandbox_dir = self._sandbox_dir
         os.makedirs(sandbox_dir, exist_ok=True)
 
         test_file = os.path.join(sandbox_dir, "test_generated.py")
@@ -108,7 +111,7 @@ class Sandbox:
         if not valid:
             return False, msg
 
-        sandbox_dir = os.path.join(self.project_root, ".sandbox_run")
+        sandbox_dir = self._sandbox_dir
         os.makedirs(sandbox_dir, exist_ok=True)
         exec_file = os.path.join(sandbox_dir, "exec_generated.py")
 

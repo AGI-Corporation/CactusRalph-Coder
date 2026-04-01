@@ -75,9 +75,12 @@ def _write_files(files: dict, output_dir: str = None):
     if not files:
         return
     base = os.path.abspath(output_dir) if output_dir else os.getcwd()
+    os.makedirs(base, exist_ok=True)
     for filename, code in files.items():
         dest = os.path.join(base, filename)
-        os.makedirs(os.path.dirname(dest) if os.path.dirname(dest) else base, exist_ok=True)
+        parent = os.path.dirname(dest)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         with open(dest, "w") as f:
             f.write(code)
         print(f"  Wrote: {dest}")
