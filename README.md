@@ -69,7 +69,7 @@
 - Sandbox safe execution environment
 - pytest-based test suite
 
-### Q2 — MCP Integration
+### Q2 — MCP Integration ✅
 - Route.X MCP bridge for tool invocation
 - GitHub MCP: auto-commit generated code
 - FastAPI server exposing agent endpoints
@@ -96,6 +96,7 @@ CactusRalph-Coder/
 ├── cactus/                    # Core package
 │   ├── __init__.py            # Package init + public API
 │   ├── agents.py              # PlannerAgent, CoderAgent, ReviewerAgent, TesterAgent
+│   ├── api.py                 # FastAPI server (REST + SSE endpoints)
 │   ├── engine.py              # CactusEngine — main orchestrator
 │   ├── sandbox.py             # Safe code execution + syntax validation
 │   ├── memory.py              # Persistent session memory
@@ -105,10 +106,12 @@ CactusRalph-Coder/
 ├── tests/
 │   ├── __init__.py
 │   ├── test_agents.py         # Agent unit tests
+│   ├── test_api.py            # FastAPI endpoint tests
 │   └── test_engine.py         # Engine + memory tests
 ├── logs/
 │   └── .gitkeep
 ├── main.py                    # CLI entry point
+├── pyproject.toml             # pytest configuration
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -160,6 +163,10 @@ python main.py --interactive
 
 # Process task queue
 python main.py --queue
+
+# Start REST + SSE API server
+python main.py --serve                      # listens on 0.0.0.0:8000
+python main.py --serve --port 9000          # custom port
 ```
 
 ---
@@ -180,7 +187,58 @@ ROUTEX_API_KEY=your_routex_api_key_here
 
 ---
 
-## Tech Stack
+## REST API
+
+When running `python main.py --serve` (or `uvicorn cactus.api:app --reload`), the following endpoints are available:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Liveness probe |
+| `POST` | `/api/v1/task` | Run a coding cycle (blocking) |
+| `POST` | `/api/v1/task/stream` | Run a coding cycle with SSE progress events |
+| `GET` | `/api/v1/memory` | List recent sessions (`?n=10`) |
+| `GET` | `/api/v1/memory/search` | Search sessions (`?q=keyword`) |
+| `DELETE` | `/api/v1/memory` | Clear all sessions |
+| `GET` | `/api/v1/queue` | List queued tasks |
+| `POST` | `/api/v1/queue` | Add task to queue |
+| `POST` | `/api/v1/queue/process` | Process queue in background |
+
+Interactive docs available at `http://localhost:8000/docs`.
+
+### SSE Streaming Example
+
+```javascript
+const es = new EventSource('/api/v1/task/stream');
+es.onmessage = (event) => {
+  const { event: stage, data } = JSON.parse(event.data);
+  if (stage === 'done') {
+    console.log('Result:', data);
+    es.close();
+  } else {
+    console.log(`[${stage}] ${data.message}`);
+  }
+};
+```
+
+---
+
+## LLM Provider Configuration
+
+CactusRalph-Coder supports both **OpenAI** (default) and **Anthropic Claude** via environment variables:
+
+```bash
+# Use OpenAI GPT-4o (default)
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-4o
+OPENAI_API_KEY=sk-...
+
+# Switch to Anthropic Claude
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-3-5-sonnet-20241022
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+---
 
 | Layer | Technology |
 |-------|-----------|

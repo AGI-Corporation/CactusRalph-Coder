@@ -1,6 +1,8 @@
 """
 CactusRalph-Coder agents: Planner, Coder, Reviewer, Tester.
 Each agent wraps an LLM call and returns structured output.
+
+Supports OpenAI (default) and Anthropic Claude via the LLM_PROVIDER env var.
 """
 
 import ast
@@ -9,37 +11,117 @@ import os
 
 from openai import OpenAI
 
+try:
+    import anthropic as anthropic_lib
+    _anthropic_available = True
+except ImportError:
+    _anthropic_available = False
+
+# Default models for each provider
+_DEFAULT_OPENAI_MODEL = "gpt-4o"
+_DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-20241022"
+
 
 class BaseAgent:
-    """Base class for all CactusRalph agents."""
+    """Base class for all CactusRalph agents.
+
+    Reads LLM_PROVIDER from the environment (``openai`` or ``anthropic``)
+    and routes all LLM calls to the appropriate client.
+    """
 
     def __init__(self, name: str):
         self.name = name
-        api_key = os.environ.get("OPENAI_API_KEY", "")
-        self.client = OpenAI(api_key=api_key) if api_key else None
-        self.default_model = os.environ.get("LLM_MODEL", "gpt-4o")
+        self.provider = os.environ.get("LLM_PROVIDER", "openai").lower()
+
+        # OpenAI client (always built if key is present)
+        openai_key = os.environ.get("OPENAI_API_KEY", "")
+        self._openai_client = OpenAI(api_key=openai_key) if openai_key else None
+
+        # Anthropic client (built only when the library is available and key is set)
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        self._anthropic_client = (
+            anthropic_lib.Anthropic(api_key=anthropic_key)
+            if _anthropic_available and anthropic_key
+            else None
+        )
+
+        # Expose the active client as .client for backward-compatibility
+        if self.provider == "anthropic":
+            self.client = self._anthropic_client
+        else:
+            self.client = self._openai_client
+
+        # Allow the caller to override the model via env var
+        env_model = os.environ.get("LLM_MODEL", "")
+        if env_model:
+            self.default_model = env_model
+        elif self.provider == "anthropic":
+            self.default_model = _DEFAULT_ANTHROPIC_MODEL
+        else:
+            self.default_model = _DEFAULT_OPENAI_MODEL
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
     def _call_llm(self, prompt: str, model: str = None) -> str:
-        """Call the LLM and return raw text."""
-        if self.client is None:
+        """Call the configured LLM provider and return raw text."""
+        model = model or self.default_model
+
+        if self.provider == "anthropic":
+            if self._anthropic_client is None:
+                raise RuntimeError(
+                    "ANTHROPIC_API_KEY is not set. Set it in your .env file."
+                )
+            message = self._anthropic_client.messages.create(
+                model=model,
+                max_tokens=4096,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return message.content[0].text.strip()
+
+        # Default: OpenAI
+        if self._openai_client is None:
             raise RuntimeError(
                 "OPENAI_API_KEY is not set. Set it in your .env file."
             )
-        model = model or self.default_model
-        response = self.client.chat.completions.create(
+        response = self._openai_client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
         )
         return response.choices[0].message.content.strip()
 
     def _call_llm_json(self, prompt: str, model: str = None) -> dict:
-        """Call the LLM requesting a JSON response and return parsed dict."""
-        if self.client is None:
+        """Call the LLM requesting structured JSON output and return a dict.
+
+        OpenAI uses the native ``json_object`` response format.
+        Anthropic relies on a strict prompt instruction and post-processing.
+        """
+        model = model or self.default_model
+
+        if self.provider == "anthropic":
+            if self._anthropic_client is None:
+                raise RuntimeError(
+                    "ANTHROPIC_API_KEY is not set. Set it in your .env file."
+                )
+            json_prompt = (
+                prompt
+                + "\n\nIMPORTANT: Return ONLY valid JSON. "
+                "No markdown fences, no explanation, no trailing text."
+            )
+            raw = self._call_llm(json_prompt, model)
+            # Strip markdown fences if the model included them anyway
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                raw = "\n".join(lines[1:-1])
+            return json.loads(raw)
+
+        # Default: OpenAI with native JSON mode
+        if self._openai_client is None:
             raise RuntimeError(
                 "OPENAI_API_KEY is not set. Set it in your .env file."
             )
-        model = model or self.default_model
-        response = self.client.chat.completions.create(
+        response = self._openai_client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
@@ -168,6 +250,9 @@ Be specific and actionable. Return only valid JSON."""
 
 class TesterAgent(BaseAgent):
     """Generates test suites and validates code syntax."""
+
+    # Prevent pytest from treating this class as a test collector
+    __test__ = False
 
     def __init__(self):
         super().__init__("TesterAgent")

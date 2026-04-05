@@ -46,12 +46,37 @@ Examples:
         type=str,
         help="Directory to write generated files into",
     )
+    parser.add_argument(
+        "--serve",
+        "-s",
+        action="store_true",
+        help="Start the FastAPI REST + SSE server",
+    )
+    parser.add_argument(
+        "--host",
+        type=str,
+        default=os.environ.get("HOST", "0.0.0.0"),
+        help="Server host (default: 0.0.0.0)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("PORT", "8000")),
+        help="Server port (default: 8000)",
+    )
     args = parser.parse_args()
 
     # Lazy import so the CLI is usable even without all deps installed for --help
     from cactus.engine import CactusEngine
 
     project_root = os.getcwd()
+
+    if args.serve:
+        import uvicorn
+        from cactus.api import app
+        uvicorn.run(app, host=args.host, port=args.port)
+        return
+
     engine = CactusEngine(project_root=project_root)
 
     if args.task:
